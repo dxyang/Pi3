@@ -1,0 +1,46 @@
+# DiverCam dives with Metashape pseudo-GT.
+#
+# Adding a newly-processed dive is one entry here plus a run of
+# scripts/prepare_divercam_index.py against its export.
+#
+#   label   unique per dive. This is what reaches the loss as `dataset_names`,
+#           so metric-scale supervision is gated per dive: only labels listed in
+#           __METRIC_DATASETS__ contribute the metric term.
+#   root    the dive's `down/` directory
+#   export  export subdir holding sparse/0 and index/
+#   metric  true only when the reconstruction is AprilTag/marker scaled
+#
+# Prefer the *_scaled export wherever one exists -- the scaled and unscaled
+# exports were separately bundle-adjusted, so one cannot be derived from the
+# other by a single factor (measured ratio CV 3.7e-3, not a pure similarity).
+
+dives:
+  - label: divercam_yawzi_lawnmower
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-19/diver_zedxm_2026-05-19-19-57-58/down
+    export: metashape_export_stride3_scaled
+    metric: true
+    site: yawzi
+    pattern: lawnmower
+    note: 21093 frames at 15fps; Metashape run at stride 3 (7029 registered, ~5fps)
+
+  # Registered at full frame rate, but no scaled export exists -- contributes to
+  # the scale-invariant point and camera losses only.
+  - label: divercam_yawzi_backforth
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-05-03/down
+    export: metashape
+    metric: false
+    site: yawzi
+    pattern: back-and-forth
+    note: 2775 frames, 2776 registered
+
+  - label: divercam_yawzi_backforth_tag
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-08-33/down
+    export: metashape_export_scaled
+    metric: true
+    site: yawzi
+    pattern: back-and-forth with AprilTag
+    note: 1545 frames, 1546 registered
+
+  # Not yet exported from .psx -- boobyrock (2026-05-20-15-54-56), joels
+  # (2026-05-20-19-51-25), yawzi soundtrap (2026-05-21-16-46-58). These are the
+  # only path to a held-out-site evaluation; every dive above is the same reef.

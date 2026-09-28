@@ -1,0 +1,94 @@
+# @package _global_
+#
+# Vision-only fine-tune of Pi3X (hypothesis 1). forward() is called with images
+# alone, which zeroes every conditioning probability in encode(), so the
+# depth/ray/pose branches never run. Keeping the multimodal architecture (rather
+# than use_multimodal=False) means this arm and the later conditioning arm share
+# one architecture and one checkpoint, so their results are comparable.
+
+model:
+    _target_: pi3.models.pi3x_finetune.Pi3XFinetune
+    pretrained: yyfz233/Pi3X
+    ckpt: null
+    freeze_encoder: true
+    freeze_multimodal: true      # unused in this arm; unfrozen-but-ungradiented params break DDP
+    freeze_metric: false         # supervised by the ported metric-scale term
+    # Capacity control. The shared trunk is 453.5M of 613.8M trainable; against one
+    # dive it overfits by epoch 2 while local_pts_loss never moves. Set
+    # freeze_decoder to drop it, or lora_r>0 to adapt it at ~2% of the params.
+    freeze_decoder: false
+    freeze_task_decoders: false
+    lora_r: 0
+    lora_alpha: 32
+    train_conf: false
+
+loss:
+    train_loss:
+        _target_: pi3.models.loss.Pi3Loss
+        train_conf: false
+        metric_weight: 1.0
+        scale_weight: 1.0
+
+    test_loss:
+        _target_: pi3.models.loss.Pi3Loss
+        train_conf: false
+        metric_weight: 1.0
+        scale_weight: 1.0
+
+train:
+    num_workers: 12
+    batch_size: 1                # unused; dynamic batch size
+    num_epoch: 20
+    iters_per_epoch: 400
+
+    print_freq: 20
+    base_seed: 666
+
+    model_dtype: bf16
+    dynamo_backend: NO
+    dynamic_compile: true
+
+    gradient_accumulation_steps: 1
+    clip_grad: 1.0
+    clip_loss: 10
+
+    seed: 42
+    resume: null
+    auto_resume: true
+    start_epoch: 0
+    global_step: 0
+    world_size: 1
+    rank: -1
+    gpu: -1
+    dist_on_itp: false
+    find_unused_parameters: false
+
+    distributed: false
+    dist_url: env://
+    dist_backend: "nccl"
+
+    optimizer:
+        type: AdamW
+        # Fine-tuning a strong checkpoint on one reef: lower than the 5e-5 used
+        # for pretraining, to limit drift from the pretrained prior.
+        lr: 1e-5
+        weight_decay: 5e-2
+        betas: [0.9, 0.95]
+        verbose: true
+        filter_bias_and_bn: true
+        encoder_lr: 0.0          # encoder is frozen
+
+    lr_scheduler:
+        type: OneCycleLR
+        max_lr: ${train.optimizer.lr}
+        pct_start: 0.05
+        anneal_strategy: cos
+        div_factor: 1000.0
+        final_div_factor: 100.0
+        total_steps: -1
+
+test:
+    num_workers: 8
+    batch_size: 1
+    print_freq: 10
+    iters_per_test: -1

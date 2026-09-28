@@ -8,6 +8,11 @@ from datasets.base.batched_sampler import DynamicBatchSampler, DynamicDistribute
 
 __HIGH_QUALITY_DATASETS__ = ['BlinkVision', 'Game', 'GameNew', 'DynamicStereo', 'FlyingThings3D', 'GTA-sfm', 'Hypersim', 'MatrixCity', 'MidAir', 'Monkaa', 'PointOdyssey', 'Sintel', 'Spring', 'TarTanAir', 'Unreal4k', 'VirtualKitti', 'Habitat']
 __MIDDLE_QUALITY_DATASETS__ = ['BlendedMVG', 'BlendedMVS', 'DTU', 'ETH3D', 'ScanNet', 'Scannetpp', 'Taskonomy']
+# Datasets whose reconstruction carries true metric scale, and may therefore
+# supervise Pi3X's metric head. DiverCam dives qualify only when their Metashape
+# export was scaled against in-scene AprilTag markers -- see divercam_manifest.yaml.
+__METRIC_DATASETS__ = ['divercam_yawzi_lawnmower', 'divercam_yawzi_backforth_tag']
+
 __INDOOR_DATASETS__ = ['Hypersim', 'ScanNet', 'Scannetpp', 'Taskonomy', 'ARKitScenes', 'Habitat']
 
 def create_dataloader(cfg, mode):

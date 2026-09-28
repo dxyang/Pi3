@@ -1,0 +1,17 @@
+# Packaging shim so this checkout can be installed editable into the loggerhead uv
+# environment. Upstream's `training` branch ships no packaging metadata; MapAnything's
+# pi3/pi3x wrappers do `from pi3.models.pi3x import Pi3X`, so they resolve to this
+# working tree (with our out-of-place metric-scale fix) instead of a copy of Pi3 `main`.
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pi3"
+version = "0.1"
+description = "Pi3 / Pi3X (training branch checkout)"
+requires-python = ">=3.10"
+dependencies = ["safetensors"]
+
+[tool.setuptools.packages.find]
+include = ["pi3*"]

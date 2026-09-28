@@ -1,0 +1,59 @@
+# @package _global_
+#
+# Phase 05/06 arms are selected by frame_stride: 1 is native (the export is
+# already stride-3 off 15fps, so ~5fps), 3 widens each window's temporal span 3x
+# and is the low-overlap arm.
+#
+# Only divercam_yawzi_lawnmower is listed. The other exported dives are the same
+# site, so adding them buys more frames but not generalization; boobyrock and
+# joels are the ones that would.
+
+train_dataset:
+    length: 4000
+
+    weights:
+        DiverCam: 4000
+
+    DiverCam:
+        _target_: datasets.divercam_dataset.DiverCamDataset
+        dives: [divercam_yawzi_lawnmower]
+        split: train
+        val_frac: 0.10
+        # Sampled per window: a larger stride covers more seafloor with the same
+        # frame count, so one model learns across framerates instead of one per rate.
+        frame_stride: [1, 2, 3, 4, 6, 8, 12, 16]
+        z_far: 0                 # metric scene, no sky/far cutoff underwater
+        frame_num: 8
+        aug_crop: 16
+        aug_focal: 0.9
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.JitterJpegLossBlurring
+        mode: 'train'
+
+train_dataloader:
+    drop_last: True
+    shuffle: True
+
+test_dataset:
+    weights:
+        DiverCam: 400
+
+    DiverCam:
+        _target_: datasets.divercam_dataset.DiverCamDataset
+        dives: [divercam_yawzi_lawnmower]
+        split: val
+        val_frac: 0.10
+        frame_stride: [1, 4, 16]
+        z_far: 0
+        frame_num: 8
+        resolution:
+            - [224, 224]
+        transform:
+            _partial_: true
+            _target_: datasets.base.transforms.ImgToTensor
+        mode: 'test'
+
+test_dataloader:
+    drop_last: False
+    shuffle: False

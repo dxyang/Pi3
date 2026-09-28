@@ -7,7 +7,7 @@ import math
 from ..utils.geometry import homogenize_points, se3_inverse, depth_edge
 from ..utils.alignment import align_points_scale
 
-from datasets import __HIGH_QUALITY_DATASETS__, __MIDDLE_QUALITY_DATASETS__
+from datasets import __HIGH_QUALITY_DATASETS__, __MIDDLE_QUALITY_DATASETS__, __METRIC_DATASETS__
 
 # ---------------------------------------------------------------------------
 # Some functions from MoGe
@@ -249,10 +249,14 @@ class Pi3Loss(nn.Module):
     def __init__(
         self,
         train_conf=False,
+        metric_weight=1.0,
+        scale_weight=1.0,
     ):
         super().__init__()
         self.point_loss = PointLoss(train_conf=train_conf)
         self.camera_loss = CameraLoss()
+        self.metric_weight = metric_weight
+        self.scale_weight = scale_weight
 
     def prepare_gt(self, gt):
         gt_pts = torch.stack([view['pts3d'] for view in gt], dim=1)
@@ -267,6 +271,7 @@ class Pi3Loss(nn.Module):
         poses = torch.einsum('bij, bnjk -> bnik', w2c_target, poses)
 
         # normalize points
+        nf_full = torch.ones(B, device=gt_pts.device, dtype=gt_pts.dtype)
         valid_batch = masks.sum([-1, -2, -3]) > 0
         if valid_batch.sum() > 0:
             B_ = valid_batch.sum()
@@ -278,6 +283,7 @@ class Pi3Loss(nn.Module):
 
             gt_pts[valid_batch] = gt_pts[valid_batch] / norm_factor[..., None, None, None, None]
             poses[valid_batch, ..., :3, 3] /= norm_factor[..., None, None]
+            nf_full[valid_batch] = norm_factor
 
         extrinsics = se3_inverse(poses)
         gt_local_pts = torch.einsum('bnij, bnhwj -> bnhwi', extrinsics, homogenize_points(gt_pts))[..., :3]
@@ -290,7 +296,8 @@ class Pi3Loss(nn.Module):
             local_points=gt_local_pts,
             valid_masks=masks,
             camera_poses=poses,
-            dataset_names=dataset_names
+            dataset_names=dataset_names,
+            norm_factor=nf_full,        # needed by the metric-scale term
         )
     
     def normalize_pred(self, pred, gt):
@@ -315,6 +322,7 @@ class Pi3Loss(nn.Module):
 
         pred['local_points'] = local_points
         pred['camera_poses'] = camera_poses_normalized
+        pred['norm_factor'] = norm_factor        # needed by the metric-scale term
 
         return pred
 
@@ -334,6 +342,56 @@ class Pi3Loss(nn.Module):
         camera_loss, camera_loss_details = self.camera_loss(pred, gt, scale)
         final_loss += camera_loss * 0.1
         details.update(camera_loss_details)
+
+        # Metric-scale loss (ported from pi3x_dirty_training/pi3x_loss.py:165-173).
+        # The point and camera terms above are scale-invariant by construction, so
+        # without this the metric head is unsupervised. Only datasets with a
+        # metrically-scaled reconstruction may supervise it.
+        if self.metric_weight > 0 and 'metric' in pred:
+            names = gt['dataset_names']
+            names = [names] if isinstance(names, str) else list(names)
+            idx = [i for i, n in enumerate(names) if n in __METRIC_DATASETS__]
+            if idx:
+                i = torch.as_tensor(idx, device=pred['metric'].device)
+                gt_metric = scale[i] * gt['norm_factor'][i] / pred['norm_factor'][i]
+                metric_loss = (torch.log1p(pred['metric'][i].float())
+                               - torch.log1p(gt_metric.float().clamp_min(0))) ** 2
+                metric_loss = metric_loss.mean()
+            else:
+                # Keep the head in the graph so it always receives gradient; a
+                # trainable parameter with no gradient makes DDP raise.
+                metric_loss = 0.0 * pred['metric'].float().mean()
+            final_loss = final_loss + self.metric_weight * metric_loss
+            details['metric_loss'] = metric_loss
+
+        # Direct absolute-scale supervision.
+        #
+        # The term above is self-referential: pred['norm_factor'] is computed FROM
+        # the metric-scaled points, so the metric factor largely cancels out of
+        # `scale * gt_norm / pred_norm` and the target moves with the prediction.
+        # Measured on real windows it contributes ~0.003 against a 2.7x depth error,
+        # and fine-tuning with it drove depth ratio 2.7 -> 4.2 while total loss fell
+        # 16x: the scale-invariant point losses improve shape and are free to drag
+        # absolute scale further off.
+        #
+        # norm_factor is the mean point distance -- predicted in the model's metric
+        # units, GT in metres -- so the model is metrically correct exactly when the
+        # two agree. Comparing them in log space gives the absolute-scale constraint
+        # the rest of the loss lacks, and still reaches the metric head, since
+        # pred['norm_factor'] depends on it.
+        if self.scale_weight > 0 and 'norm_factor' in pred:
+            names = gt['dataset_names']
+            names = [names] if isinstance(names, str) else list(names)
+            idx = [i for i, n in enumerate(names) if n in __METRIC_DATASETS__]
+            if idx:
+                i = torch.as_tensor(idx, device=pred['norm_factor'].device)
+                scale_loss = (torch.log(pred['norm_factor'][i].float().clamp_min(1e-6))
+                              - torch.log(gt['norm_factor'][i].float().clamp_min(1e-6))) ** 2
+                scale_loss = scale_loss.mean()
+            else:
+                scale_loss = 0.0 * pred['norm_factor'].float().mean()
+            final_loss = final_loss + self.scale_weight * scale_loss
+            details['scale_loss'] = scale_loss
 
         return final_loss, details
 
