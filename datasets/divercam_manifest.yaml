@@ -3,44 +3,119 @@
 # Adding a newly-processed dive is one entry here plus a run of
 # scripts/prepare_divercam_index.py against its export.
 #
-#   label   unique per dive. This is what reaches the loss as `dataset_names`,
-#           so metric-scale supervision is gated per dive: only labels listed in
-#           __METRIC_DATASETS__ contribute the metric term.
-#   root    the dive's `down/` directory
-#   export  export subdir holding sparse/0 and index/
-#   metric  true only when the reconstruction is AprilTag/marker scaled
+#   label    unique per dive. This is what reaches the loss as `dataset_names`,
+#            so metric-scale supervision is gated per dive: only labels listed in
+#            __METRIC_DATASETS__ contribute the metric term.
+#   root     the dive's `down/` directory
+#   export   export subdir holding sparse/0 and index/
+#   depth    subdir of per-view dense depth EXRs, plus depth_meta.json. Values are
+#            RAW chunk-internal depth at half the image resolution: multiply by
+#            the sidecar's transform_scale for metres, halve the intrinsics, and
+#            treat 0 as invalid. Built at downscale 2, mild filtering.
+#   metric   true only when the reconstruction is AprilTag/marker scaled
+#   scale_*  provenance from the export's scale_report.json: how many enabled
+#            scale bars set the scale and how well they agree. Small spread means
+#            the metric claim is supported; a large spread means the survey's
+#            geometry disagrees with itself and `metric` deserves scepticism.
+#   segments count of continuous runs. Breaks are consecutive-frame steps beyond
+#            10x the median (~26 cm in 67 ms, i.e. ~4 m/s -- not a diver), so
+#            they are reconstruction discontinuities and windows must not span them.
 #
-# Prefer the *_scaled export wherever one exists -- the scaled and unscaled
-# exports were separately bundle-adjusted, so one cannot be derived from the
-# other by a single factor (measured ratio CV 3.7e-3, not a pure similarity).
+# All five grid surveys pass scripts/audit_divercam_depth.py: every pose has an
+# image and an EXR, and the dense depth agrees with the bundle-adjustment tie
+# points to within +/-0.02% bias, 5.4-7.8 mm median per-point error.
+#
+# Superseded 2026-09-30: the yawzi entry used to point at metashape_export_stride3_scaled.
+# The full-rate project is a separate bundle adjustment (~1% different scale), so the
+# stride-3 export and index must not be mixed with the full-rate depth.
 
 dives:
+  - label: divercam_tektite_lawnmower
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-19/diver_zedxm_2026-05-19-14-52-33/down
+    export: tektite-lawnmower-lost-2026-05-19-14-52-33-downleft_colmap
+    depth: tektite-lawnmower-lost-2026-05-19-14-52-33-downleft_depth
+    metric: true
+    site: tektite
+    pattern: lawnmower
+    frames: 27135
+    segments: 5
+    scale_bars: 20
+    scale_error_median_percent: 0.65
+    note: 5 tags (01-04, 10) all at 150 mm. Tags 01 and 02 are the weak pair
+      (145.5 and 153.2 mm measured, 2.4-2.9 px corner reprojection); 03, 04, 10
+      agree to 1%. Median dense depth 1.230 m.
+
   - label: divercam_yawzi_lawnmower
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-19/diver_zedxm_2026-05-19-19-57-58/down
-    export: metashape_export_stride3_scaled
+    export: yawzi-lawnmower-diver_zedxm_2026-05-19-19-57-58-down-left_colmap
+    depth: yawzi-lawnmower-diver_zedxm_2026-05-19-19-57-58-down-left_depth
     metric: true
     site: yawzi
     pattern: lawnmower
-    note: 21093 frames at 15fps; Metashape run at stride 3 (7029 registered, ~5fps)
+    frames: 21087
+    segments: 7
+    scale_bars: 16
+    scale_error_median_percent: 0.35
+    note: the best-scaled survey -- 4 tags (05-08) at 150 mm agreeing to +/-1.3%,
+      corner reprojection 0.22-1.23 px. Median dense depth 1.206 m.
 
-  # Registered at full frame rate, but no scaled export exists -- contributes to
-  # the scale-invariant point and camera losses only.
-  - label: divercam_yawzi_backforth
-    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-05-03/down
-    export: metashape
-    metric: false
-    site: yawzi
-    pattern: back-and-forth
-    note: 2775 frames, 2776 registered
+  - label: divercam_boobyrock_lawnmower
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-20/diver_zedxm_2026-05-20-15-54-56/down
+    export: boobyrock-lawnmower-2026-05-20-15-54-56-downleft_colmap
+    depth: boobyrock-lawnmower-2026-05-20-15-54-56-downleft_depth
+    metric: true
+    site: boobyrock
+    pattern: lawnmower
+    frames: 12578
+    segments: 6
+    scale_bars: 4
+    scale_error_median_percent: 0.08
+    note: a single tag (13, 150 mm) sets the scale, so its 0.08% residual means
+      self-consistent rather than cross-validated -- nothing disagrees because
+      there is nothing to disagree with. Lowest altitude of the five, median
+      dense depth 0.976 m.
 
-  - label: divercam_yawzi_backforth_tag
-    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-08-33/down
-    export: metashape_export_scaled
+  - label: divercam_joels_lawnmower
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-20/diver_zedxm_2026-05-20-19-51-25/down
+    export: joels-lawnmower-2026-05-20-19-51-25-downleft_colmap
+    depth: joels-lawnmower-2026-05-20-19-51-25-downleft_depth
+    metric: true
+    site: joels
+    pattern: lawnmower
+    frames: 16462
+    segments: 4
+    scale_bars: 12
+    scale_error_median_percent: -0.01
+    note: mixed tag sizes by design -- tags 01 and 03 are 155 mm, tag 13 is 150 mm.
+      Tag 13 is poorly determined (2.82 px corner reprojection, corners in only
+      14-65 images) and was downweighted to accuracy 0.008 m rather than deleted,
+      which moved the scale -3.9% and left tags 01/03 within 1%. Median dense
+      depth 1.084 m.
+
+  - label: divercam_yawzi_soundtrap
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-16-46-58/down
+    export: yawzi-soundtrap-lawnmower-2026-05-21-16-46-58-downleft_colmap
+    depth: yawzi-soundtrap-lawnmower-2026-05-21-16-46-58-downleft_depth
     metric: true
     site: yawzi
-    pattern: back-and-forth with AprilTag
-    note: 1545 frames, 1546 registered
+    pattern: lawnmower
+    frames: 16042
+    segments: 1
+    scale_bars: 16
+    scale_error_median_percent: -2.32
+    note: WEAKEST metric claim of the five, though temporally the cleanest (zero
+      discontinuities). Uses the same physical tags 05-08 as the yawzi lawnmower
+      dive, which resolves them to +/-1.3%; here they scatter 19% (tag 6 at -7%,
+      tag 8 at +10% from corners seen in only 6-31 images), so the survey's
+      geometry is locally distorted rather than the tags being wrong. Kept metric
+      by choice; the depth consistency gate cannot see this, since depth and poses
+      share the distortion. Median dense depth 0.950 m.
 
-  # Not yet exported from .psx -- boobyrock (2026-05-20-15-54-56), joels
-  # (2026-05-20-19-51-25), yawzi soundtrap (2026-05-21-16-46-58). These are the
-  # only path to a held-out-site evaluation; every dive above is the same reef.
+# Not listed, deliberately:
+#
+#   17-08-33 (yawzi back-and-forth with AprilTag, 1545 frames, metric) -- camera
+#   alignment is being re-run as of 2026-09-30, which invalidates its depth maps.
+#   Re-add after rebuild + re-export.
+#
+#   17-05-03 (yawzi back-and-forth, 2775 frames) -- no markers at all, so not
+#   metric. Parked.
