@@ -111,11 +111,24 @@ dives:
       by choice; the depth consistency gate cannot see this, since depth and poses
       share the distortion. Median dense depth 0.950 m.
 
+  - label: divercam_yawzi_backforth_tag
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-08-33/down
+    export: yawzi-backandforthtag-2026-05-21-17-08-33-down-left_colmap
+    depth: yawzi-backandforthtag-2026-05-21-17-08-33-down-left_depth
+    metric: true
+    site: yawzi
+    pattern: back-and-forth with AprilTag
+    frames: 1545
+    segments: 2
+    scale_bars: 8
+    scale_error_median_percent: -0.08
+    note: re-aligned 2026-10-01 with scale bars enabled during camera
+      optimisation, which is why its two tags agree to 0.13% (150.1 and 149.9 mm)
+      where the grid surveys -- optimised without bars, scaled only afterwards --
+      scatter 2-19%. Not a grid survey but a short back-and-forth, so useful
+      for revisit behaviour rather than area coverage. Median dense depth 1.241 m.
+
 # Not listed, deliberately:
-#
-#   17-08-33 (yawzi back-and-forth with AprilTag, 1545 frames, metric) -- camera
-#   alignment is being re-run as of 2026-09-30, which invalidates its depth maps.
-#   Re-add after rebuild + re-export.
 #
 #   17-05-03 (yawzi back-and-forth, 2775 frames) -- no markers at all, so not
 #   metric. Parked.
