@@ -21,13 +21,27 @@
 #            10x the median (~26 cm in 67 ms, i.e. ~4 m/s -- not a diver), so
 #            they are reconstruction discontinuities and windows must not span them.
 #
-# All five grid surveys pass scripts/audit_divercam_depth.py: every pose has an
-# image and an EXR, and the dense depth agrees with the bundle-adjustment tie
-# points to within +/-0.02% bias, 5.4-7.8 mm median per-point error.
+# REBUILT 2026-10-26, from scratch, after the rectified-intrinsics bug (see
+# CLAUDE.md). Every project was re-aligned in the GUI at f=1304.3611 with all 11
+# intrinsic parameters locked, then markers enabled and scale bars checked and
+# `updateTransform()` applied. Everything downstream -- depth maps, EXR exports,
+# COLMAP poses, indices, WAI trees, covisibility -- was regenerated.
 #
-# Superseded 2026-09-30: the yawzi entry used to point at metashape_export_stride3_scaled.
-# The full-rate project is a separate bundle adjustment (~1% different scale), so the
-# stride-3 export and index must not be mixed with the full-rate depth.
+# What changed, and why the numbers below look different from any earlier copy:
+#   depth is ~1.28-1.33x deeper, matching the 1.3162 focal ratio exactly. Median
+#   altitudes moved from 0.95-1.24 m to 1.25-1.63 m, which is where a survey flown
+#   at 1-2 m hover belongs.
+#   scale residuals improved on every survey but joels. soundtrap went from -2.32%
+#   (its tags scattering 19%) to -0.02%, so it is no longer the weak metric claim.
+#   EVERY survey is now ONE continuous segment. The old 2-7 breaks per survey were
+#   artifacts of the bad alignment, not gaps in the data: max consecutive-frame step
+#   is 1.4-8.1x the median against a BREAK_FACTOR of 10. Anything selecting frames
+#   by SEGMENT INDEX (configs/splits/holdout_boobyrock_soundtrap.yaml) is therefore
+#   broken and must be reworked to select by frame range.
+#   ZED stereo now agrees to 0.979-0.992 (was 1.287), flat across range.
+#
+# Note the exports are now SIMPLE_PINHOLE, not PINHOLE: the rectified sensor has
+# b1 exactly 0, so fx == fy and Metashape drops the second focal.
 
 dives:
   - label: divercam_tektite_lawnmower
@@ -38,12 +52,11 @@ dives:
     site: tektite
     pattern: lawnmower
     frames: 27135
-    segments: 5
+    segments: 1
     scale_bars: 20
-    scale_error_median_percent: 0.65
-    note: 5 tags (01-04, 10) all at 150 mm. Tags 01 and 02 are the weak pair
-      (145.5 and 153.2 mm measured, 2.4-2.9 px corner reprojection); 03, 04, 10
-      agree to 1%. Median dense depth 1.230 m.
+    scale_error_median_percent: 0.18
+    note: the largest survey. 5 tags (01-04, 10) all at 150 mm, now agreeing to
+      +0.18% where the pre-redo alignment gave 0.65%. Median dense depth 1.539 m.
 
   - label: divercam_yawzi_lawnmower
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-19/diver_zedxm_2026-05-19-19-57-58/down
@@ -53,11 +66,11 @@ dives:
     site: yawzi
     pattern: lawnmower
     frames: 21087
-    segments: 7
+    segments: 1
     scale_bars: 16
-    scale_error_median_percent: 0.35
-    note: the best-scaled survey -- 4 tags (05-08) at 150 mm agreeing to +/-1.3%,
-      corner reprojection 0.22-1.23 px. Median dense depth 1.206 m.
+    scale_error_median_percent: -0.02
+    note: 4 tags (05-08) at 150 mm, -0.02% -- tied with soundtrap for the best
+      scaled survey. Median dense depth 1.624 m.
 
   - label: divercam_boobyrock_lawnmower
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-20/diver_zedxm_2026-05-20-15-54-56/down
@@ -67,13 +80,13 @@ dives:
     site: boobyrock
     pattern: lawnmower
     frames: 12578
-    segments: 6
+    segments: 1
     scale_bars: 4
-    scale_error_median_percent: 0.08
-    note: a single tag (13, 150 mm) sets the scale, so its 0.08% residual means
+    scale_error_median_percent: -0.13
+    note: a single tag (13, 150 mm) sets the scale, so its -0.13% residual means
       self-consistent rather than cross-validated -- nothing disagrees because
-      there is nothing to disagree with. Lowest altitude of the five, median
-      dense depth 0.976 m.
+      there is nothing to disagree with. Still the lowest altitude of the set,
+      median dense depth 1.249 m.
 
   - label: divercam_joels_lawnmower
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-20/diver_zedxm_2026-05-20-19-51-25/down
@@ -83,14 +96,14 @@ dives:
     site: joels
     pattern: lawnmower
     frames: 16462
-    segments: 4
+    segments: 1
     scale_bars: 12
-    scale_error_median_percent: -0.01
+    scale_error_median_percent: -0.52
     note: mixed tag sizes by design -- tags 01 and 03 are 155 mm, tag 13 is 150 mm.
-      Tag 13 is poorly determined (2.82 px corner reprojection, corners in only
-      14-65 images) and was downweighted to accuracy 0.008 m rather than deleted,
-      which moved the scale -3.9% and left tags 01/03 within 1%. Median dense
-      depth 1.084 m.
+      The only survey whose residual got WORSE in the redo (-0.01% -> -0.52%), which
+      is expected -- the old figure was fit against a focal that was wrong, so it was
+      never a measure of accuracy. -0.52% over 12 bars of two different sizes is the
+      weakest cross-validated claim of the set. Median dense depth 1.397 m.
 
   - label: divercam_yawzi_soundtrap
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-16-46-58/down
@@ -102,14 +115,11 @@ dives:
     frames: 16042
     segments: 1
     scale_bars: 16
-    scale_error_median_percent: -2.32
-    note: WEAKEST metric claim of the five, though temporally the cleanest (zero
-      discontinuities). Uses the same physical tags 05-08 as the yawzi lawnmower
-      dive, which resolves them to +/-1.3%; here they scatter 19% (tag 6 at -7%,
-      tag 8 at +10% from corners seen in only 6-31 images), so the survey's
-      geometry is locally distorted rather than the tags being wrong. Kept metric
-      by choice; the depth consistency gate cannot see this, since depth and poses
-      share the distortion. Median dense depth 0.950 m.
+    scale_error_median_percent: -0.02
+    note: was the WEAKEST metric claim at -2.32% with its tags scattering 19%; the
+      re-align brought it to -0.02% on the same 16 bars. That scatter was the bad
+      focal distorting the geometry, not the tags. Uses the same physical tags 05-08
+      as the yawzi lawnmower dive. Median dense depth 1.410 m.
 
   - label: divercam_yawzi_backforth_tag
     root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-08-33/down
@@ -119,16 +129,42 @@ dives:
     site: yawzi
     pattern: back-and-forth with AprilTag
     frames: 1545
-    segments: 2
+    segments: 1
     scale_bars: 8
-    scale_error_median_percent: -0.08
-    note: re-aligned 2026-10-01 with scale bars enabled during camera
-      optimisation, which is why its two tags agree to 0.13% (150.1 and 149.9 mm)
-      where the grid surveys -- optimised without bars, scaled only afterwards --
-      scatter 2-19%. Not a grid survey but a short back-and-forth, so useful
-      for revisit behaviour rather than area coverage. Median dense depth 1.241 m.
+    scale_error_median_percent: -0.12
+    note: two tags (5, 6) at 150 mm, -0.12%. Not a grid survey but a short
+      back-and-forth, so useful for revisit behaviour rather than area coverage.
+      A forward/ directory now exists for this dive (1546 frames, one more than
+      the 1545 downward -- the forward camera starts a frame early), so it can
+      carry mixed down/forward windows. Median dense depth 1.627 m.
 
-# Not listed, deliberately:
-#
-#   17-05-03 (yawzi back-and-forth, 2775 frames) -- no markers at all, so not
-#   metric. Parked.
+  # The first non-metric dive in the tree. It has no markers, so
+  # chunk.transform.scale is None, and depth_scale_to_metres is a MULTIPLIER in
+  # divercam.py:434 and divercam_covisibility.py:103 -- without a number it cannot
+  # enter the tree at all, not even for scale-invariant use, because the
+  # covisibility radius thresholds are in metres. The scale below was fitted from
+  # the EKF by scripts/divercam_fit_scale.py and `metric` stays FALSE: the number
+  # exists so the geometry bookkeeping works, not so the dive can supervise scale.
+  - label: divercam_yawzi_backforth_dendrogyra
+    root: /srv/warplab/home/dxy/divercam_dataset/2026-05-21/diver_zedxm_2026-05-21-17-05-03/down
+    export: yawzi-backandforth-2026-05-21-17-05-03-down-left_colmap
+    depth: yawzi-backandforth-2026-05-21-17-05-03-down-left_depth
+    metric: false
+    site: yawzi
+    pattern: back-and-forth, no markers
+    frames: 2775
+    segments: 1
+    scale_bars: 0
+    scale_error_median_percent: null
+    note: re-aligned 2026-10-26, 2775/2775 cameras at the rectified focal, no markers
+      and no scale bars. Scale 0.09570636 m per chunk unit, fitted against the EKF's
+      inter-frame translations (DVL velocity x dt, metric to ~0.5% with no accumulated
+      drift -- the absolute EKF XY drifts and is NOT used). Per-step spread is +/-10.6%,
+      but two independent checks land it -- the implied median step is 0.0259 m against
+      0.026 m on the scaled surveys, and the implied median dense depth is 1.473 m,
+      inside the 1.25-1.63 m band of the five -- and nothing in the fit used depth.
+      Held out as the TEST revisit sequence. It is not a site-generalisation probe,
+      since site yawzi is in train; it is there because the GT-free revisit metrics
+      need a back-and-forth dive outside training and backforth_tag is in train.
+      Covisibility is sparse for a survey of its size (median 2 neighbours, 2174 of
+      5549 frames isolated), so prefer temporal windows over covisibility sets here.
