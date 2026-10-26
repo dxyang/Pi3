@@ -35,9 +35,11 @@
 #   (its tags scattering 19%) to -0.02%, so it is no longer the weak metric claim.
 #   EVERY survey is now ONE continuous segment. The old 2-7 breaks per survey were
 #   artifacts of the bad alignment, not gaps in the data: max consecutive-frame step
-#   is 1.4-8.1x the median against a BREAK_FACTOR of 10. Anything selecting frames
-#   by SEGMENT INDEX (configs/splits/holdout_boobyrock_soundtrap.yaml) is therefore
-#   broken and must be reworked to select by frame range.
+#   is 1.4-8.1x the median against a BREAK_FACTOR of 10. Selecting data by SEGMENT
+#   INDEX is therefore gone -- the dataloader raises on `segments`/`exclude_segments`
+#   and splits narrow a survey through `split_masks` instead (the current split is
+#   configs/splits/holdout_boobyrock.yaml). The `segments` field below stays as a
+#   health signal: anything other than 1 means that reconstruction broke somewhere.
 #   ZED stereo now agrees to 0.979-0.992 (was 1.287), flat across range.
 #
 # Note the exports are now SIMPLE_PINHOLE, not PINHOLE: the rectified sensor has
